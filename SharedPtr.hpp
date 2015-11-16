@@ -21,46 +21,74 @@ namespace cs540{
 						return ref_count;
 					};
 			};
+			class DeleterBase{
+				virtual void operator()() = 0;
+				virtual ~DeleterBase();
+			};
+			template<typename U>
+			class Deleter : public DeleterBase{
+				public:
+					Deleter(U *p) : ptr(p){};
+					void operator()(){
+						delete ptr;
+					};
+					U* ptr;
+			};
 		private:
 			T* data;
 			RefCount* reference_counter;
+			Deleter<T>* del;
 		public:
 			//constructors
 			SharedPtr() : data(nullptr){
 				reference_counter = new RefCount();
 				reference_counter->addReference();
+				del = new Deleter<T>(data);
 			};
 			template<typename U>
-				explicit SharedPtr(U* u){
-					//This is used to convert a pointer of type T to P? Not sure exactly what to do here		
+				explicit SharedPtr(U* u) : data(u), del(u){
+					data = u;
+					reference_counter = new RefCount();
+					reference_counter->addReference();
+					del = new Deleter<U>(data);
 				};
-			SharedPtr(const SharedPtr &p) : data(*p), reference_counter(p->reference_counter){
+			SharedPtr(const SharedPtr &p) : data(*p), reference_counter(p->reference_counter), del(*p){
 				reference_counter->addReference();	
 			};
 			template<typename U> 
-				SharedPtr(const SharedPtr<U> &p){
-					
+				SharedPtr(const SharedPtr<U> &p) : data(*p){
+					if(reference_counter->freeReference() == 0){
+						(*del)();
+						delete reference_counter;
+						delete del;
+					}
+					reference_counter = p.reference_counter;
+					reference_counter->addReference();
+					del = p.del;
 				};
-			SharedPtr(SharedPtr &&p){
-				//Ask about this, pretty confused here
+			SharedPtr(SharedPtr &&p) : data(std::move(p.get())), reference_counter(std::move(p.reference_counter)), del(std::move(p.del)) {
+				p = nullptr;
 			};
 			template<typename U> 
-				SharedPtr(SharedPtr<U> &&p){
-					//ask here
+				SharedPtr(SharedPtr<U> &&p) : data(std::move(p.get())), reference_counter(std::move(p.reference_counter)), del(std::move(p.del)){
+					p = nullptr;
 				};
 			SharedPtr& operator=(const SharedPtr &p){
 				if(*p == *data){
 					return *this;
 				}
 				if(reference_counter->freeReference() == 0){
-					//Do we need to free it in this case?
-					delete data;
+					(*del)();
 					delete reference_counter;
+					delete del;
 				}
 				//Is this correct?
 				data = p.get();
 				reference_counter = p.reference_counter;
-				reference_counter->addReference();
+				if(data != nullptr){
+					reference_counter->addReference();
+				}
+				del = p.del;
 				return *this;
 			};
 			template<typename U> 
@@ -70,40 +98,61 @@ namespace cs540{
 					}
 					if(reference_counter->freeReference() == 0){
 						//Do we need to free it in this case?
-						delete data;
+						(*del)();
 						delete reference_counter;
+						delete del;
 					}
 					//Is this correct?
 					data = p.get();
 					reference_counter = p.reference_counter;
-					reference_counter->addReference();
+					if(data!= nullptr){
+						reference_counter->addReference();
+					}
+					del = p.del;
 					return *this;	
 				};
 			SharedPtr& operator=(SharedPtr &&p){
-				//What makes these different from the two above? What is &&p? Reference to a reference?
+				//Move assignment operator, use info from move constructor
+				data = std::move(p.get());
+				reference_counter = std::move(p.reference_counter);
+				del = std::move(p.del);
+				p = nullptr;
+				return *this;
 			};
 			template<typename U> 
 				SharedPtr& operator=(SharedPtr<U> &&p){
 					//Same questions as above
+					data = std::move(p.get());
+					reference_counter = std::move(p.reference_counter);
+					del = std::move(p.del);
+					p = nullptr;
+					return *this;
 				};
 			//destructor
 			~SharedPtr(){
 				if(reference_counter->freeReference() == 0){
-					delete data;
+					(*del)();
 					delete reference_counter;
+					delete del;
 				}
 			};
 			//modifiers
 			void reset(){
 				if(reference_counter->freeReference() == 0){
-					delete data;
+					 (*del)();
 					delete reference_counter;
+					delete del;
 				}
 				data = nullptr;
 			};
 			template<typename U> 
 				void reset(U *p){
 					//what is different about working with the member templates? confused here
+					reset();
+					data = p;
+					reference_counter = new RefCount();
+					reference_counter->addReference();
+					del = new Deleter<U>(data);
 				};
 			//observers
 			T *get() const{
@@ -151,9 +200,15 @@ namespace cs540{
 
 	//Ask about these, what is the difference here?
 	template<typename T, typename U>
-		SharedPtr<T> static_pointer_cast(const SharedPtr<U> &sp);
+		SharedPtr<T> static_pointer_cast(const SharedPtr<U> &sp){
+			SharedPtr<T> retval(static_cast<T*>(sp.get()));
+			return retval;
+		}
 	template<typename T, typename U>
-		SharedPtr<T> dynamic_pointer_cast(const SharedPtr<U> &sp);								
+		SharedPtr<T> dynamic_pointer_cast(const SharedPtr<U> &sp){
+			SharedPtr<T> retval(dynamic_cast<T*>(sp.get()));
+			return retval;
+		}			
 
 }
 #endif
