@@ -1,5 +1,5 @@
 P = sharedPtr
-F = -g -Wall -std=c++0x
+F = -g -Wall -std=c++0x -pthread
 C = g++
 
 all: 
