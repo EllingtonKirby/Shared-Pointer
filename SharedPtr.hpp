@@ -73,7 +73,9 @@ namespace cs540{
 
 			template<typename U, typename P>
 			SharedPtr(const SharedPtr<U> &p, P *ptr) : SharedPtrBase(p.reference_counter, p.del), data(ptr){ 
-				reference_counter->ref_count++;
+				if(reference_counter != nullptr && data != nullptr){
+					reference_counter->ref_count++;	
+				}
 			};
 
 			SharedPtr& operator=(const SharedPtr &p){
@@ -81,8 +83,7 @@ namespace cs540{
 					return *this;
 				}
 				if(reference_counter){
-					reference_counter->ref_count--;
-					if(reference_counter->ref_count.load() == 0){
+					if(reference_counter->ref_count.fetch_sub(1) == 1){
 						(*del)();
 						delete reference_counter;
 						delete del;
@@ -99,8 +100,7 @@ namespace cs540{
 			template<typename U> 
 				SharedPtr<T>& operator=(const SharedPtr<U> &p){
 					if(reference_counter){
-						reference_counter->ref_count--;
-						if(reference_counter->ref_count.load() == 0){
+						if(reference_counter->ref_count.fetch_sub(1) == 1){
 							(*del)();
 							delete reference_counter;
 							delete del;
@@ -111,7 +111,6 @@ namespace cs540{
 						p.reference_counter->ref_count++;
 					}
 					reference_counter = p.reference_counter;
-					//data = static_cast<Deleter<U>*>(del)->ptr;
 					data = p.get();
 					return *this;	
 				};
@@ -136,8 +135,7 @@ namespace cs540{
 			//destructor
 			~SharedPtr(){
 				if(reference_counter){
-					reference_counter->ref_count--;
-					if(reference_counter->ref_count.load() == 0){
+					if(reference_counter->ref_count.fetch_sub(1) == 1){
 						(*del)();
 						delete reference_counter;
 						delete del;
@@ -150,8 +148,7 @@ namespace cs540{
 			//modifiers
 			void reset(){
 				if(reference_counter){
-					reference_counter->ref_count--;
-					if(reference_counter->ref_count.load() == 0){
+					if(reference_counter->ref_count.fetch_sub(1) == 1){
 						(*del)();
 						delete reference_counter;
 						delete del;
